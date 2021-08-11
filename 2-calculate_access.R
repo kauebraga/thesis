@@ -6,6 +6,7 @@ library(readr)
 options(scipen = 999)
 
 # gtfs_sigla <- "forcorrigidocm"
+# gtfs_sigla <- "forcorrigidoce"
 
 calculate_access <- function(gtfs_sigla) {
   
@@ -51,14 +52,15 @@ calculate_access <- function(gtfs_sigla) {
                           # CMA_ET_15 = sum( mat_total[which( tt_median <= 15)], na.rm=T)
                           # , CMA_ET_30 = sum( mat_total[which( tt_median <= 30)], na.rm=T)
                           # , CMA_ET_45 = sum( mat_total[which( tt_median <= 45)], na.rm=T)
-                          CMAET50 = sum( mat_total[which( tt_median <= 50)], na.rm=T)
+                          # CMAET50 = sum( mat_total[which( tt_median <= 50)], na.rm=T)
                           # , CMA_ET_60 = sum( mat_total[which( tt_median <= 60)], na.rm=T)
                           
                           # , CMA_TT_15 = sum( empregos_total[which( tt_median <= 15)], na.rm=T)
                           # , CMA_TT_30 = sum( empregos_total[which( tt_median <= 30)], na.rm=T)
-                          # , CMA_TT_45 = sum( empregos_total[which( tt_median <= 45)], na.rm=T)
+                          CMATT45 = sum( empregos_total[which( tt_median <= 45)], na.rm=T)
                           # , CMA_TT_60 = sum( empregos_total[which( tt_median <= 60)], na.rm=T)
-                          , CMATT65 = sum( empregos_total[which( tt_median <= 65)], na.rm=T)
+                          , CMATT60 = sum( empregos_total[which( tt_median <= 60)], na.rm=T)
+                          , CMATT90 = sum( empregos_total[which( tt_median <= 90)], na.rm=T)
                         ),
                         by=.(city, origin) ]
   
@@ -74,29 +76,63 @@ calculate_access <- function(gtfs_sigla) {
   ttmatrix_schools <- ttmatrix[mat_total > 0]
   
   # calculate impedance
-  ttmatrix_jobs[,':='(impedance_65 = fifelse(tt_median <= 65, 1, 0))]
-  ttmatrix_schools[,':='(impedance_50 = fifelse(tt_median <= 50, 1, 0))]
+  ttmatrix_jobs[,':='(impedance_45 = fifelse(tt_median <= 45, 1, 0))]
+  ttmatrix_jobs[,':='(impedance_60 = fifelse(tt_median <= 60, 1, 0))]
+  ttmatrix_jobs[,':='(impedance_90 = fifelse(tt_median <= 90, 1, 0))]
+  # ttmatrix_schools[,':='(impedance_50 = fifelse(tt_median <= 50, 1, 0))]
+  
+  # # calculate weights i (normalized impedance by origin)
+  # ttmatrix_jobs[, wi := impedance_45/sum(impedance_45), by=origin]
+  # ttmatrix_jobs[, wi := impedance_60/sum(impedance_60), by=origin]
+  # ttmatrix_jobs[, wi := impedance_90/sum(impedance_90), by=origin]
+  # ttmatrix_schools[, wi := impedance_50/sum(impedance_50), by=origin]
+  # 
+  # # calculate weights j (normalized impedance by destination)
+  # ttmatrix_jobs[, wj := impedance_45/sum(impedance_45), by=destination]
+  # ttmatrix_jobs[, wj := impedance_60/sum(impedance_60), by=destination]
+  # ttmatrix_jobs[, wj := impedance_90/sum(impedance_90), by=destination]
+  # ttmatrix_schools[, wj := impedance_50/sum(impedance_50), by=destination]
   
   # calculate pop served
-  ttmatrix_jobs[, pop_served_65 := sum(pop_total * impedance_65, na.rm = TRUE), by= .(destination)]
-  ttmatrix_schools[, pop_served_50 := sum(pop_total * impedance_50, na.rm = TRUE), by= .(destination)]
+  ttmatrix_jobs[, pop_served_45 := sum(pop_total * impedance_45, na.rm = TRUE), by= .(destination)]
+  ttmatrix_jobs[, pop_served_60 := sum(pop_total * impedance_60, na.rm = TRUE), by= .(destination)]
+  ttmatrix_jobs[, pop_served_90 := sum(pop_total * impedance_90, na.rm = TRUE), by= .(destination)]
+  # ttmatrix_schools[, pop_served_50 := sum(pop_total * impedance_50, na.rm = TRUE), by= .(destination)]
+  
+  # for bfca
+  # ttmatrix_jobs[, pop_served_65b := sum(pop_total * wi, na.rm = TRUE), by= .(destination)]
+  # ttmatrix_schools[, pop_served_50b := sum(pop_total * wi, na.rm = TRUE), by= .(destination)]
+  
+  
   
   # calculate ppr
-  ttmatrix_jobs[, ppr_65 := empregos_total[1] / pop_served_65, by = destination]
-  ttmatrix_schools[, ppr_50 := mat_total[1] / pop_served_50, by = destination]
+  ttmatrix_jobs[, ppr_45 := empregos_total[1] / pop_served_45, by = destination]
+  ttmatrix_jobs[, ppr_60 := empregos_total[1] / pop_served_60, by = destination]
+  ttmatrix_jobs[, ppr_90 := empregos_total[1] / pop_served_90, by = destination]
+  # ttmatrix_schools[, ppr_50 := mat_total[1] / pop_served_50, by = destination]
+  
+  # ttmatrix_jobs[, ppr_65b := empregos_total[1] / pop_served_65b, by = destination]
+  # ttmatrix_schools[, ppr_50b := mat_total[1] / pop_served_50b, by = destination]
+  
   
   
   # calculate 2sfca
-  acess_2sfca_jobs <- ttmatrix_jobs[, .(TSFCATT65 = sum(ppr_65 * impedance_65, na.rm = TRUE)),
+  acess_2sfca_jobs <- ttmatrix_jobs[, .(FCATT45 = sum(ppr_45 * impedance_45, na.rm = TRUE),
+                                        FCATT60 = sum(ppr_60 * impedance_60, na.rm = TRUE),
+                                        FCATT90 = sum(ppr_90 * impedance_90, na.rm = TRUE)
+                                        # BFCATT65 = sum(ppr_65b * wj, na.rm = TRUE)
+                                        ),
                                     by = .(city, origin)]
   
-  acess_2sfca_schools <- ttmatrix_schools[, .(TSFCAET50 = sum(ppr_50 * impedance_50, na.rm = TRUE)),
-                                          by = .(city, origin)]
+  # acess_2sfca_schools <- ttmatrix_schools[, .(FCAET50 = sum(ppr_50 * impedance_50, na.rm = TRUE),
+  #                                             BFCAET50 = sum(ppr_50b * wj, na.rm = TRUE)),
+  #                                         by = .(city, origin)]
   
   # bind both bfca
-  acess_2sfca <- full_join(acess_2sfca_jobs, acess_2sfca_schools,
-                           by = c("city", "origin"),
-                           suffix = c("TT", "ET"))
+  acess_2sfca <- acess_2sfca_jobs
+  # acess_2sfca <- full_join(acess_2sfca_jobs, acess_2sfca_schools,
+  #                          by = c("city", "origin"),
+  #                          suffix = c("TT", "ET"))
   
   # a <- acess_sf %>% filter(!is.infinite(TSFCA60)) %>% 
   # mutate(quant = cut(TSFCA45, breaks = quantile(TSFCA60, probs = seq(0, 1, 0.1))))
@@ -121,7 +157,10 @@ calculate_access <- function(gtfs_sigla) {
   path_out <- sprintf("../../data/thesis/output_access/acess_%s.rds", gtfs_sigla)
   write_rds(acess_sf, path_out)
   
-  # mapview::mapview(acess_sf, zcol = "CMA_TT_65", color = NULL)
+  # mapview::mapview(acess_sf, zcol = "CMATT65", color = NULL)
+  # acess_sf %>% filter(!is.infinite(FCATT65)) %>%
+  #   filter(FCATT65 < 0.6) %>%
+  # mapview::mapview(zcol = "FCATT65", color = NULL)
   
 }
 
