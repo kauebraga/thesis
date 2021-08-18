@@ -49,6 +49,67 @@ theme_mapa <- function(base_size) {
 }
 
 
+# linhas HM
+gtfs <- gtfstools::read_gtfs("../../otp/thesis/graphs/forpadrao/gtfs_for_metrofor_2021-01.zip")
+linhas_hm <- gtfs %>%
+  gtfstools::get_trip_geometry(file = "stop_times") %>%
+  left_join(gtfs$trips %>% select(trip_id, route_id), by = "trip_id") %>%
+  left_join(gtfs$routes %>% select(route_id, route_long_name), by = "route_id") %>%
+  count(route_long_name)
+
+
+# acesso geral --------------------------------------------------------------------------------
+
+acess_wide <- acess %>%
+  filter(city %in% c("forcorrigidocm", "forcorrigidoce")) %>%
+  gather("ind", "valor", CMATT45:FCATT90) %>%
+  spread(city, valor) %>%
+  st_sf(crs = 4326)
+
+# var <- "FCATT90";tipo <- "forcorrigidocm"
+
+fazer_mapa_geral <- function(var, tipo) {
+  
+  labelss <- if (grepl("CMA", var)) ks else label_number(accuracy = 0.01)
+  
+  oi <- 
+    acess_wide %>%
+    # filter(stringr::str_detect(ind, "TT")) %>%
+    filter(ind == var) %>%
+    mutate(forcorrigidocm = ifelse(ind == "FCATT60" & forcorrigidocm > 0.5, 0.5, forcorrigidocm)) %>%
+    mutate(forcorrigidocm = ifelse(ind == "FCATT90" & forcorrigidocm > 0.25, 0.25, forcorrigidocm))
+    
+    
+    
+    ggplot(oi)+
+    geom_sf(aes(fill = !!rlang::sym(tipo)), color = NA)+
+    geom_sf(data = limits, fill = NA)+
+    geom_sf(data = linhas_hm, size = 0.2)+
+    scale_fill_viridis_c(option = "inferno", label = labelss)+
+    labs(
+      fill = ""
+      # title = var
+    )+
+    theme_mapa()
+  
+}
+
+map_CMA60_p50 <- fazer_mapa_geral("CMATT60", "forcorrigidocm")
+map_CMA90_p50 <- fazer_mapa_geral("CMATT90", "forcorrigidocm")
+map_FCA60_p50 <- fazer_mapa_geral("FCATT60", "forcorrigidocm")
+map_FCA90_p50 <- fazer_mapa_geral("FCATT90", "forcorrigidocm")
+
+maps_geral <- map_CMA60_p50 + map_CMA90_p50 + map_FCA60_p50 + map_FCA90_p50 + plot_layout(nrow = 1) &
+  theme(legend.text = element_text(size = 5))
+
+
+ggsave(filename = "figures/anpet_2021/map_geral.png",
+       plot = maps_geral,
+       units = "cm",
+       width = 16,
+       height = 6)
+
+
 # comparacao PR x P50 -------------------------------------------------------------------------
 
 
@@ -89,7 +150,7 @@ fazer_mapa <- function(var, tipo) {
   # print(limits_scale)
   # limits_ind[ind == var] %>% pull{tipo)
   
-  labelss <- if (grepl("CMA", var) & tipo == "dif_abs") ks else label_number(accuracy = 0.01)
+  labelss <- if (grepl("CMA", var) & tipo == "dif_abs") ks else if (tipo == "dif_log_tc") label_percent() else label_number(accuracy = 0.01)
   
   
   acess_dif_wide %>%
@@ -98,6 +159,7 @@ fazer_mapa <- function(var, tipo) {
     ggplot()+
     geom_sf(aes(fill = !!rlang::sym(tipo)), color = NA)+
     geom_sf(data = limits, fill = NA)+
+    geom_sf(data = linhas_hm, size = 0.2)+
     scale_fill_distiller(palette = "RdBu", direction = 1,
                          limits = c(-1,1)*limits_scale,
                          # breaks = c(-0.5, 0, 0.5),
@@ -106,7 +168,7 @@ fazer_mapa <- function(var, tipo) {
     labs(
       fill = ""
       # title = var
-      )+
+    )+
     theme_mapa()
 }
 
@@ -131,7 +193,8 @@ b <- lapply(c(
   "CMATT90", "FCATT90"),
   fazer_mapa, tipo = "dif_log_tc")
 
-maps_log <- purrr::reduce(b, `+`) + plot_layout(ncol = 2)
+maps_log <- purrr::reduce(b, `+`) + plot_layout(ncol = 2, guides = "collect") & 
+  theme(legend.position = "bottom")
 
 ggsave(filename = "figures/anpet_2021/map_comp_log_PRP50.png",
        plot = maps_log,
@@ -172,9 +235,10 @@ acess_dif_wide <- acess %>%
 
 # acess_dif_wide %>% filter(ind == "FCATT45") %>% filter(dif_abs > 0.126)
 
-# library(mapview)
+library(mapview)
 # a <- acess_dif_wide %>% filter(stringr::str_detect(ind, "CMATT"))
-# mapview(a, zcol = "dif_abs", col.regions = RColorBrewer::brewer.pal(10, "RdBu"), col = NULL)
+a <- acess_dif_wide %>% filter(stringr::str_detect(ind, "FCATT60"))
+mapview(a, zcol = "dif_log_tc", col.regions = RColorBrewer::brewer.pal(10, "RdBu"), col = NULL)
 
 # limits for each indicator
 limits_ind <- acess_dif_wide %>%
@@ -194,7 +258,7 @@ fazer_mapa <- function(var, tipo) {
   # print(limits_scale)
   # limits_ind[ind == var] %>% pull{tipo)
   
-  labelss <- if (grepl("CMA", var) & tipo == "dif_abs") ks else label_number(accuracy = 0.01)
+  labelss <- if (grepl("CMA", var) & tipo == "dif_abs") ks else if (tipo == "dif_log_tc") label_percent() else label_number(accuracy = 0.01)
   
   
   acess_dif_wide %>%
@@ -203,6 +267,7 @@ fazer_mapa <- function(var, tipo) {
     ggplot()+
     geom_sf(aes(fill = !!rlang::sym(tipo)), color = NA)+
     geom_sf(data = limits, fill = NA)+
+    geom_sf(data = linhas_hm, size = 0.2)+
     scale_fill_distiller(palette = "RdBu", direction = 1,
                          limits = c(-1,1)*limits_scale,
                          # breaks = c(-0.5, 0, 0.5),
@@ -236,10 +301,12 @@ b <- lapply(c(
   "CMATT90", "FCATT90"),
   fazer_mapa, tipo = "dif_log_tc")
 
-maps_log <- purrr::reduce(b, `+`) + plot_layout(ncol = 2)
+
+maps_log <- purrr::reduce(b, `+`) + plot_layout(ncol = 2, guides = "collect") & 
+  theme(legend.position = "bottom")
 
 ggsave(filename = "figures/anpet_2021/map_comp_log_P50P85.png",
        plot = maps_log,
        units = "cm",
        width = 16,
-       height = 14)
+       height = 12)
