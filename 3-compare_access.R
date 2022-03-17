@@ -9,6 +9,8 @@ library(mapview)
 library(patchwork)
 library(scales)
 options(scipen = 999)
+mapviewOptions(fgb = FALSE)
+# mapviewOptions(platform = "mapdeck")
 
 
 ks <- function (x) { scales::label_number(accuracy = 1,
@@ -62,7 +64,7 @@ linhas_hm <- gtfs %>%
 
 acess_wide <- acess %>%
   filter(city %in% c("forcorrigidocm", "forcorrigidoce")) %>%
-  gather("ind", "valor", CMATT45:FCATT90) %>%
+  gather("ind", "valor", CMATT60) %>%
   spread(city, valor) %>%
   st_sf(crs = 4326)
 
@@ -116,7 +118,8 @@ ggsave(filename = "figures/anpet_2021/map_geral.png",
 
 acess_dif_wide <- acess %>%
   filter(city %in% c("forpadrao", "forcorrigidocm")) %>%
-  gather("ind", "valor", CMATT45:FCATT90) %>%
+  select(origin, city, CMATT60) %>%
+  gather("ind", "valor", CMATT60) %>%
   spread(city, valor) %>%
   # calculate abs diffs
   mutate(dif_abs = forcorrigidocm - forpadrao,
@@ -129,8 +132,7 @@ acess_dif_wide <- acess %>%
 
 
 # library(mapview)
-# a <- acess_dif_wide %>% filter(stringr::str_detect(ind, "CMATT"))
-# mapview(a, zcol = "dif_abs", col.regions = RColorBrewer::brewer.pal(10, "RdBu"), col = NULL)
+# mapview(acess_dif_wide, zcol = "dif_log_tc", col.regions = RColorBrewer::brewer.pal(10, "RdBu"), col = NULL)
 
 # limits for each indicator
 limits_ind <- acess_dif_wide %>%
@@ -174,12 +176,14 @@ fazer_mapa <- function(var, tipo) {
 
 # apply function
 a <- lapply(c(
+  "CMATT60"),
   # "CMATT45", "FCATT45",
-  "CMATT60", "FCATT60",
-  "CMATT90", "FCATT90"),
-  fazer_mapa, tipo = "dif_abs")
+  # "CMATT60", "FCATT60",
+  # "CMATT90", "FCATT90"),
+  fazer_mapa, tipo = "dif_log_tc")
 
-maps_abs <- purrr::reduce(a, `+`) + plot_layout(ncol = 2)
+# maps_abs <- purrr::reduce(a, `+`) + plot_layout(ncol = 2)
+map_abs <- a
 
 ggsave(filename = "figures/anpet_2021/map_comp_abs_PRP50.png",
        plot = maps_abs,
