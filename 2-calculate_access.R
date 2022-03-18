@@ -5,6 +5,7 @@ library(sf)
 library(readr)
 options(scipen = 999)
 
+# gtfs_sigla <- "forpadrao"
 # gtfs_sigla <- "forcorrigidocm"
 # gtfs_sigla <- "forcorrigidoce"
 
@@ -13,7 +14,7 @@ calculate_access <- function(gtfs_sigla) {
   
   ttmatrix <- read_rds(sprintf("../../data/thesis/output_ttmatrix/ttmatrix_%s.rds", gtfs_sigla))
   
-  ttmatrix <- ttmatrix %>% rename(origin = fromId, destination = toId, tt_median = travel_time)
+  ttmatrix <- ttmatrix %>% select(origin = fromId, destination = toId, tt_median = travel_time) %>% setDT()
   ttmatrix[, city := gtfs_sigla]
   
   # Pegar arquivo com os hexagonos com as atividades
@@ -46,21 +47,24 @@ calculate_access <- function(gtfs_sigla) {
                        c('empregos_total', 'mat_total') := 
                          list(i.empregos_total, i.mat_total)]
   
+  ttmatrix[, opp := 1]
+  
   # calculate cumulative access -----------------------
   acess_cum <- ttmatrix[, 
                         .(
+                          CMAUN = sum( opp[which( tt_median <= 70)], na.rm=T),
                           # CMA_ET_15 = sum( mat_total[which( tt_median <= 15)], na.rm=T)
                           # , CMA_ET_30 = sum( mat_total[which( tt_median <= 30)], na.rm=T)
-                          # , CMA_ET_45 = sum( mat_total[which( tt_median <= 45)], na.rm=T)
+                          CMAET45 = sum( mat_total[which( tt_median <= 45)], na.rm=T)
                           # CMAET50 = sum( mat_total[which( tt_median <= 50)], na.rm=T)
-                          # , CMA_ET_60 = sum( mat_total[which( tt_median <= 60)], na.rm=T)
+                          , CMAET60 = sum( mat_total[which( tt_median <= 60)], na.rm=T)
                           
                           # , CMA_TT_15 = sum( empregos_total[which( tt_median <= 15)], na.rm=T)
                           # , CMA_TT_30 = sum( empregos_total[which( tt_median <= 30)], na.rm=T)
-                          CMATT45 = sum( empregos_total[which( tt_median <= 45)], na.rm=T)
+                          , CMATT45 = sum( empregos_total[which( tt_median <= 45)], na.rm=T)
                           # , CMA_TT_60 = sum( empregos_total[which( tt_median <= 60)], na.rm=T)
                           , CMATT60 = sum( empregos_total[which( tt_median <= 60)], na.rm=T)
-                          , CMATT90 = sum( empregos_total[which( tt_median <= 90)], na.rm=T)
+                          , CMATT75 = sum( empregos_total[which( tt_median <= 75)], na.rm=T)
                         ),
                         by=.(city, origin) ]
   
@@ -78,7 +82,7 @@ calculate_access <- function(gtfs_sigla) {
   # calculate impedance
   ttmatrix_jobs[,':='(impedance_45 = fifelse(tt_median <= 45, 1, 0))]
   ttmatrix_jobs[,':='(impedance_60 = fifelse(tt_median <= 60, 1, 0))]
-  ttmatrix_jobs[,':='(impedance_90 = fifelse(tt_median <= 90, 1, 0))]
+  ttmatrix_jobs[,':='(impedance_75 = fifelse(tt_median <= 75, 1, 0))]
   # ttmatrix_schools[,':='(impedance_50 = fifelse(tt_median <= 50, 1, 0))]
   
   # # calculate weights i (normalized impedance by origin)
@@ -96,7 +100,7 @@ calculate_access <- function(gtfs_sigla) {
   # calculate pop served
   ttmatrix_jobs[, pop_served_45 := sum(pop_total * impedance_45, na.rm = TRUE), by= .(destination)]
   ttmatrix_jobs[, pop_served_60 := sum(pop_total * impedance_60, na.rm = TRUE), by= .(destination)]
-  ttmatrix_jobs[, pop_served_90 := sum(pop_total * impedance_90, na.rm = TRUE), by= .(destination)]
+  ttmatrix_jobs[, pop_served_75 := sum(pop_total * impedance_75, na.rm = TRUE), by= .(destination)]
   # ttmatrix_schools[, pop_served_50 := sum(pop_total * impedance_50, na.rm = TRUE), by= .(destination)]
   
   # for bfca
@@ -108,7 +112,7 @@ calculate_access <- function(gtfs_sigla) {
   # calculate ppr
   ttmatrix_jobs[, ppr_45 := empregos_total[1] / pop_served_45, by = destination]
   ttmatrix_jobs[, ppr_60 := empregos_total[1] / pop_served_60, by = destination]
-  ttmatrix_jobs[, ppr_90 := empregos_total[1] / pop_served_90, by = destination]
+  ttmatrix_jobs[, ppr_75 := empregos_total[1] / pop_served_75, by = destination]
   # ttmatrix_schools[, ppr_50 := mat_total[1] / pop_served_50, by = destination]
   
   # ttmatrix_jobs[, ppr_65b := empregos_total[1] / pop_served_65b, by = destination]
@@ -119,7 +123,7 @@ calculate_access <- function(gtfs_sigla) {
   # calculate 2sfca
   acess_2sfca_jobs <- ttmatrix_jobs[, .(FCATT45 = sum(ppr_45 * impedance_45, na.rm = TRUE),
                                         FCATT60 = sum(ppr_60 * impedance_60, na.rm = TRUE),
-                                        FCATT90 = sum(ppr_90 * impedance_90, na.rm = TRUE)
+                                        FCATT75 = sum(ppr_75 * impedance_75, na.rm = TRUE)
                                         # BFCATT65 = sum(ppr_65b * wj, na.rm = TRUE)
                                         ),
                                     by = .(city, origin)]
@@ -176,19 +180,31 @@ calculate_access("forcorrigidoce")
 # testes para alguns hex ----------------------------------------------------------------------
 library(mapview)
 
-ttmatrix <- rbind(read_rds(sprintf("../../data/thesis/output_ttmatrix/ttmatrix_%s.rds", "forpadrao")) %>% mutate(cenario = "PR"),
-                  read_rds(sprintf("../../data/thesis/output_ttmatrix/ttmatrix_%s.rds", "forcorrigidocm"))  %>% mutate(cenario = "P50"))
+ttmatrix <- rbind(read_rds(sprintf("../../data/thesis/output_ttmatrix/ttmatrix_%s.rds", "forcorrigidocm")) %>% 
+                    mutate(cenario = "P50"),
+                  read_rds(sprintf("../../data/thesis/output_ttmatrix/ttmatrix_%s.rds", "forcorrigidoce"))  
+                  %>% mutate(cenario = "P85"))
 
 # abrir oportunidades com hexagonos
 hexagonos_sf <- read_rds("../../data/dissertacao/hex_agregados/hex_agregados_09.rds") %>%
-  select(id_hex)
+  select(id_hex, empregos_total)
 ungroup()
+
+mapview(hexagonos_sf)
 
 
 # pegar hexagonos de teste
 # hex_teste <- "89801045c73ffff"
+# hex_teste <- "89801041907ffff" # lado leste
+# hex_teste <- "89801045c4fffff" # lado oeste
 
-ttmatrix_teste <- ttmatrix %>% filter(fromId == hex_teste) %>% filter(travel_time < 65)
+ttmatrix_teste <- ttmatrix %>% filter(fromId == hex_teste) %>% filter(travel_time < 60)
 ttmatrix_teste <- ttmatrix_teste %>% left_join(hexagonos_sf, by = c("toId" = "id_hex")) %>% st_sf()
+
+ttmatrix_teste %>% st_set_geometry(NULL) %>%
+  group_by(cenario) %>% 
+  summarise(empregos_total = sum(empregos_total, na.rm = TRUE)) %>%
+  pivot_wider(names_from = "cenario", values_from = "empregos_total") %>%
+  mutate(dif = log(P85/P50))
 
 mapview(ttmatrix_teste, zcol = "cenario", alpha.regions = 0.3)
