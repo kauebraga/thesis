@@ -4,6 +4,7 @@
 # id_hex <- c("8980104e0d3ffff", "8980104e46bffff")
 # comparison = c("forcorrigidocm", "forcorrigidoce")
 id_hex <- "898010451c7ffff"
+id_hex <- "8980107b28bffff"
 tt <- 60
 
 get_ttime_isocrhone <- function(id_hex, comparison = c("forpadrao", "forcorrigidocm"), tt) {
@@ -31,5 +32,36 @@ get_ttime_isocrhone <- function(id_hex, comparison = c("forpadrao", "forcorrigid
   
 }
 
+# group these matrix
+ttmatrix_sf1 <- ttmatrix_sf %>%
+  group_by(tipo) %>% summarise()
 
+ttmatrix_sf2 <- ttmatrix_sf %>%
+  group_by(tipo) %>% summarise()
+
+icons <- awesomeIcons(
+  icon = "bus",
+  library = "fa",
+  # iconrColor = 'black',
+  iconRotate = 10)
+
+leaflet() %>%
+  addProviderTiles(providers$CartoDB.Positron) %>%
+  addPolygons(data = limits, fillOpacity = 0, color = "black", weight = 2) %>%
+  addAwesomeMarkers(data = hex %>% filter(id_hex == "898010451c7ffff") %>% st_centroid(),
+                    icon = icons) %>% 
+  addPolygons(data = ttmatrix_sf1 %>% filter(tipo == "forpadrao"), 
+              color = "blue", stroke = FALSE, fillOpacity = 0.4) %>%
+  addPolygons(data = ttmatrix_sf1 %>% filter(tipo == "forcorrigidocm"), 
+              color = "green", stroke = FALSE, fillOpacity = 0.5)
+
+leaflet() %>%
+  addProviderTiles(providers$CartoDB.Positron) %>%
+  addPolygons(data = limits, fillOpacity = 0, color = "black", weight = 2) %>%
+  addAwesomeMarkers(data = hex %>% filter(id_hex == "8980107b28bffff") %>% st_centroid(),
+                    icon = icons) %>% 
+  addPolygons(data = ttmatrix_sf2 %>% filter(tipo == "forpadrao"), 
+              color = "blue", stroke = FALSE, fillOpacity = 0.4) %>%
+  addPolygons(data = ttmatrix_sf2 %>% filter(tipo == "forcorrigidocm"), 
+              color = "green", stroke = FALSE, fillOpacity = 0.5)
 
