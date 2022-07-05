@@ -8,6 +8,7 @@ library(hrbrthemes)
 library(mapview)
 library(patchwork)
 library(scales)
+library(ggnewscale)
 options(scipen = 999)
 
 
@@ -28,6 +29,9 @@ acess <- rbind(
 
 # abrir limits
 limits <- geobr::read_municipality(2304400)
+
+# abrir maptles
+maptile <- read_rds("../../data/thesis/maptile_crop_mapbox_for_2017.rds")
 
 theme_mapa <- function(base_size) {
   
@@ -73,12 +77,16 @@ acess_wide <- acess %>%
   spread(city, valor) %>%
   # calculate abs diffs
   mutate(dif_abs = forcorrigidocm - forpadrao,
+         dif_rel = ((forcorrigidocm - forpadrao)/forpadrao),
          dif_log = log(forcorrigidocm/forpadrao)) %>%
+  mutate(dif_rel_tc = ifelse(dif_rel > 0.4, 0.4,
+                             ifelse(dif_rel < -0.4, -0.4, dif_rel))) %>%
   mutate(dif_log_tc = ifelse(dif_log > 0.4, 0.4,
                              ifelse(dif_log < -0.4, -0.4, dif_log))) %>%
   st_sf(crs = 4326) %>%
   filter(!is.na(dif_abs)) %>%
   st_sf(crs = 4326)
+
 
 
 # mapview(acess_wide, zcol = "dif_log_tc", alpha = 0.2)
@@ -94,34 +102,70 @@ limits_ind <- acess_wide %>%
   st_set_geometry(NULL) %>%
   group_by(ind) %>%
   summarise(dif_abs = max(abs(dif_abs), na.rm = TRUE),
-            dif_log_tc = max(abs(dif_log_tc), na.rm = TRUE)) %>% setDT()
+            dif_log_tc = max(abs(dif_log_tc), na.rm = TRUE),
+            dif_rel_tc = max(abs(dif_rel_tc), na.rm = TRUE)
+            ) %>% setDT()
 
 
-acess_jobs1 <- ggplot(acess %>% filter(city %in% c("forpadrao", "forcorrigidocm")))+
+
+max_plot1 <- max(acess %>% filter(city %in% c("forpadrao", "forcorrigidocm")) %>% pull(CMATT60))
+
+acess_jobs1a <- ggplot(acess %>% filter(city %in% c("forpadrao")) %>% st_transform(3857))+
+  geom_raster(data = maptile, aes(x, y, fill = hex), alpha = 1) +
+  coord_equal() +
+  scale_fill_identity()+
+  # nova escala
+  new_scale_fill() +
   geom_sf(aes(fill = CMATT60), color = NA)+
-  geom_sf(data = limits, fill = NA)+
-  geom_sf(data = linhas_hm, size = 0.2)+
+  geom_sf(data = st_transform(limits, 3857), fill = NA)+
+  # geom_sf(data = st_transform(linhas_hm, 3857), size = 0.2)+
   scale_fill_viridis_c(option = "inferno",
-                       label = ks
+                       label = ks,
+                       limits = c(0, max_plot1)
   )+
   labs(
     fill = ""
     # title = var
   )+
-  facet_wrap(~city)+
+  # facet_wrap(~city)+
+  theme_mapa()
+
+acess_jobs1b <- ggplot(acess %>% filter(city %in% c("forcorrigidocm")) %>% st_transform(3857))+
+  geom_raster(data = maptile, aes(x, y, fill = hex), alpha = 1) +
+  coord_equal() +
+  scale_fill_identity()+
+  # nova escala
+  new_scale_fill() +
+  geom_sf(aes(fill = CMATT60), color = NA)+
+  geom_sf(data = st_transform(limits, 3857), fill = NA)+
+  # geom_sf(data = st_transform(linhas_hm, 3857), size = 0.2)+
+  scale_fill_viridis_c(option = "inferno",
+                       label = ks,
+                       limits = c(0, max_plot1)
+  )+
+  labs(
+    fill = ""
+    # title = var
+  )+
+  # facet_wrap(~city)+
   theme_mapa()
 
 
 
-map_acess_dif_jobs_c1 <- acess_wide %>%
+map_acess_dif_jobs_c1 <- acess_wide %>% st_transform(3857) %>%
   filter(ind == "CMATT60") %>%
   ggplot()+
-  geom_sf(aes(fill = dif_log_tc), color = NA)+
-  geom_sf(data = limits, fill = NA)+
-  geom_sf(data = linhas_hm, size = 0.2)+
+  geom_raster(data = maptile, aes(x, y, fill = hex), alpha = 1) +
+  coord_equal() +
+  scale_fill_identity()+
+  # nova escala
+  new_scale_fill() +
+  geom_sf(aes(fill = dif_rel_tc), color = NA)+
+  geom_sf(data = st_transform(limits, 3857), fill = NA)+
+  # geom_sf(data = st_transform(linhas_hm, 3857), size = 0.2)+
   scale_fill_distiller(palette = "RdBu", direction = 1,
-                       limits = c(-1,1)*limits_ind[ind == "CMATT60"]$dif_log_tc,
-                       # breaks = c(-0.5, 0, 0.5),
+                       limits = c(-1,1)*limits_ind[ind == "CMATT60"]$dif_rel_tc,
+                       breaks = c(-0.4, -0.2, 0, 0.2, 0.4),
                        labels = label_percent()
   ) +
   labs(
@@ -130,29 +174,36 @@ map_acess_dif_jobs_c1 <- acess_wide %>%
   )+
   theme_mapa()
 
-boxplot_acess_dif_jobs_c1 <- acess_wide %>%
-  filter(ind == "CMATT60") %>%
-  ggplot()+
-  geom_boxplot(aes(x = "", y = dif_log))+
-  geom_hline(yintercept = 0)+
-  scale_y_continuous(labels = label_percent())+
-  labs(
-    x = ""
-    # title = var
-  )+
-  theme_ipsum_es(grid = "X")+
-  theme(axis.text.y = element_blank())+
-  coord_flip(ylim = c(-0.4, 0.4))
+# boxplot_acess_dif_jobs_c1 <- acess_wide %>%
+#   filter(ind == "CMATT60") %>%
+#   ggplot()+
+#   geom_boxplot(aes(x = "", y = dif_log))+
+#   geom_hline(yintercept = 0)+
+#   scale_y_continuous(labels = label_percent())+
+#   labs(
+#     x = ""
+#     # title = var
+#   )+
+#   theme_ipsum_es(grid = "X")+
+#   theme(axis.text.y = element_blank())+
+#   coord_flip(ylim = c(-0.4, 0.4))
 
 
 map_acess_dif_c1 <- 
-  acess_jobs1 /map_acess_dif_jobs_c1 +
-  # map_acess_dif_jobs_c1 + map_acess_dif_schools_c1 +boxplot_acess_dif_jobs_c1  +  boxplot_acess_dif_schools_c1 + 
-  plot_layout(heights = c(1, 1))
+  (acess_jobs1a + acess_jobs1b)  /map_acess_dif_jobs_c1+
+  plot_layout(heights = c(1, 2), widths = c(2, 1))
+  
+
+map_acess_dif_c1[[1]] <- map_acess_dif_c1[[1]] + 
+  plot_layout(tag_level = 'new', guides = 'collect')
+map_acess_dif_c1 <- map_acess_dif_c1 + plot_annotation(tag_levels = c('A', '1')) &
+  theme(legend.position = "bottom",
+        legend.key.width= unit(1, 'cm'))
+  
 
 ggsave(filename = "A1/figures/2-map_acess_c1.png",
        plot = map_acess_dif_c1,
-       width = 16, height = 12,
+       width = 16, height = 16,
        units = "cm")
 
 # acesso diff - figura 2  -------------------------------------------------------------------
@@ -165,7 +216,10 @@ acess_wide <- acess %>%
   spread(city, valor) %>%
   # calculate abs diffs
   mutate(dif_abs = forcorrigidoce - forcorrigidocm,
+         dif_rel = ((forcorrigidoce - forcorrigidocm)/forcorrigidocm),
          dif_log = log(forcorrigidoce/forcorrigidocm)) %>%
+  mutate(dif_rel_tc = ifelse(dif_rel > 0.6, 0.6,
+                             ifelse(dif_rel < -0.6, -0.6, dif_rel))) %>%
   mutate(dif_log_tc = ifelse(dif_log > 0.8, 0.8,
                              ifelse(dif_log < -0.8, -0.8, dif_log))) %>%
   st_sf(crs = 4326) %>%
@@ -186,21 +240,45 @@ limits_ind <- acess_wide %>%
   st_set_geometry(NULL) %>%
   group_by(ind) %>%
   summarise(dif_abs = max(abs(dif_abs), na.rm = TRUE),
+            dif_rel_tc = max(abs(dif_rel_tc), na.rm = TRUE),
             dif_log_tc = max(abs(dif_log_tc), na.rm = TRUE)) %>% setDT()
 
 
-acess_jobs2 <- ggplot(acess %>% filter(city %in% c("forcorrigidocm", "forcorrigidoce")))+
+max_plot2 <- max(acess %>% filter(city %in% c("forcorrigidocm", "forcorrigidoce")) %>% pull(CMATT60))
+
+acess_jobs2a <- ggplot(acess %>% filter(city %in% c("forcorrigidocm")) %>% st_transform(3857))+
+  geom_raster(data = maptile, aes(x, y, fill = hex), alpha = 1) +
+  coord_equal() +
+  scale_fill_identity()+
+  # nova escala
+  new_scale_fill() +
   geom_sf(aes(fill = CMATT60), color = NA)+
-  geom_sf(data = limits, fill = NA)+
-  geom_sf(data = linhas_hm, size = 0.2)+
+  geom_sf(data = st_transform(limits, 3857), fill = NA)+
+  geom_sf(data = st_transform(linhas_hm, 3857), size = 0.2)+
   scale_fill_viridis_c(option = "inferno",
-                       label = ks
+                       label = ks,
+                       limits = c(0, max_plot2)
   )+
   labs(
     fill = ""
     # title = var
   )+
-  facet_wrap(~city)+
+  # facet_wrap(~city)+
+  theme_mapa()
+
+acess_jobs2b <- ggplot(acess %>% filter(city %in% c("forcorrigidoce")))+
+  geom_sf(aes(fill = CMATT60), color = NA)+
+  geom_sf(data = limits, fill = NA)+
+  geom_sf(data = linhas_hm, size = 0.2)+
+  scale_fill_viridis_c(option = "inferno",
+                       label = ks,
+                       limits = c(0, max_plot2)
+  )+
+  labs(
+    fill = ""
+    # title = var
+  )+
+  # facet_wrap(~city)+
   theme_mapa()
 
 
@@ -208,12 +286,12 @@ acess_jobs2 <- ggplot(acess %>% filter(city %in% c("forcorrigidocm", "forcorrigi
 map_acess_dif_jobs_c2 <- acess_wide %>%
   filter(ind == "CMATT60") %>%
   ggplot()+
-  geom_sf(aes(fill = dif_log_tc), color = NA)+
+  geom_sf(aes(fill = dif_rel_tc), color = NA)+
   geom_sf(data = limits, fill = NA)+
   geom_sf(data = linhas_hm, size = 0.2)+
   scale_fill_distiller(palette = "RdBu", direction = 1,
-                       limits = c(-1,1)*limits_ind[ind == "CMATT60"]$dif_log_tc,
-                       # breaks = c(-0.5, 0, 0.5),
+                       limits = c(-1,1)*limits_ind[ind == "CMATT60"]$dif_rel_tc,
+                       breaks = c(-0.6, -0.3, 0, 0.3, 0.6),
                        labels = label_percent()
   ) +
   labs(
@@ -222,27 +300,34 @@ map_acess_dif_jobs_c2 <- acess_wide %>%
   )+
   theme_mapa()
 
-boxplot_acess_dif_jobs_c2 <- acess_wide %>%
-  filter(ind == "CMATT60") %>%
-  ggplot()+
-  geom_boxplot(aes(x = "", y = dif_log))+
-  geom_hline(yintercept = 0)+
-  scale_y_continuous(labels = label_percent())+
-  labs(
-    x = ""
-    # title = var
-  )+
-  theme_ipsum_es(grid = "X")+
-  theme(axis.text.y = element_blank())+
-  coord_flip(ylim = c(-0.4, 0.4))
+# boxplot_acess_dif_jobs_c1 <- acess_wide %>%
+#   filter(ind == "CMATT60") %>%
+#   ggplot()+
+#   geom_boxplot(aes(x = "", y = dif_log))+
+#   geom_hline(yintercept = 0)+
+#   scale_y_continuous(labels = label_percent())+
+#   labs(
+#     x = ""
+#     # title = var
+#   )+
+#   theme_ipsum_es(grid = "X")+
+#   theme(axis.text.y = element_blank())+
+#   coord_flip(ylim = c(-0.4, 0.4))
 
 
 map_acess_dif_c2 <- 
-  acess_jobs2 /map_acess_dif_jobs_c2 +
-  # map_acess_dif_jobs_c1 + map_acess_dif_schools_c1 +boxplot_acess_dif_jobs_c1  +  boxplot_acess_dif_schools_c1 + 
-  plot_layout(heights = c(1, 2))
+  (acess_jobs2a + acess_jobs2b)  /map_acess_dif_jobs_c2+
+  plot_layout(heights = c(1, 2), widths = c(2, 1))
+
+
+map_acess_dif_c2[[1]] <- map_acess_dif_c2[[1]] + 
+  plot_layout(tag_level = 'new', guides = 'collect')
+map_acess_dif_c2 <- map_acess_dif_c2 + plot_annotation(tag_levels = c('A', '1')) &
+  theme(legend.position = "bottom",
+        legend.key.width= unit(1, 'cm'))
+
 
 ggsave(filename = "A1/figures/2-map_acess_c2.png",
        plot = map_acess_dif_c2,
-       width = 16, height = 12,
+       width = 16, height = 16,
        units = "cm")
