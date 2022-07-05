@@ -107,7 +107,7 @@ caracterize_scenario <- function(scenario) {
     labs(x = "",
          y = "Accessibility difference")+
     guides(colour = guide_legend(nrow = 1))+
-    coord_cartesian(ylim = c(-0.5, 0.5))
+    coord_cartesian(ylim = if (scenario == "C1")  c(-0.5, 0.5) else c(-0.8, 0))
   
   # save
   ggsave(plot = boxplot_income, filename = sprintf("A1/figures/boxplot_income_%s.png", scenario),

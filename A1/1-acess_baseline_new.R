@@ -55,6 +55,8 @@ theme_mapa <- function(base_size) {
 
 # linhas HM
 gtfs <- gtfstools::read_gtfs("../../otp/thesis/graphs/forpadrao/gtfs_for_metrofor_2021-01.zip")
+# gtfs stop times needs ordering
+gtfs$stop_times <- setorder(gtfs$stop_times, trip_id, stop_sequence)
 linhas_hm <- gtfs %>%
   gtfstools::get_trip_geometry(file = "stop_times") %>%
   left_join(gtfs$trips %>% select(trip_id, route_id), by = "trip_id") %>%
@@ -118,7 +120,7 @@ acess_jobs1a <- ggplot(acess %>% filter(city %in% c("forpadrao")) %>% st_transfo
   new_scale_fill() +
   geom_sf(aes(fill = CMATT60), color = NA)+
   geom_sf(data = st_transform(limits, 3857), fill = NA)+
-  # geom_sf(data = st_transform(linhas_hm, 3857), size = 0.2)+
+  geom_sf(data = st_transform(linhas_hm, 3857), size = 0.2)+
   scale_fill_viridis_c(option = "inferno",
                        label = ks,
                        limits = c(0, max_plot1)
@@ -138,7 +140,7 @@ acess_jobs1b <- ggplot(acess %>% filter(city %in% c("forcorrigidocm")) %>% st_tr
   new_scale_fill() +
   geom_sf(aes(fill = CMATT60), color = NA)+
   geom_sf(data = st_transform(limits, 3857), fill = NA)+
-  # geom_sf(data = st_transform(linhas_hm, 3857), size = 0.2)+
+  geom_sf(data = st_transform(linhas_hm, 3857), size = 0.2)+
   scale_fill_viridis_c(option = "inferno",
                        label = ks,
                        limits = c(0, max_plot1)
@@ -162,11 +164,11 @@ map_acess_dif_jobs_c1 <- acess_wide %>% st_transform(3857) %>%
   new_scale_fill() +
   geom_sf(aes(fill = dif_rel_tc), color = NA)+
   geom_sf(data = st_transform(limits, 3857), fill = NA)+
-  # geom_sf(data = st_transform(linhas_hm, 3857), size = 0.2)+
+  geom_sf(data = st_transform(linhas_hm, 3857), size = 0.2)+
   scale_fill_distiller(palette = "RdBu", direction = 1,
-                       limits = c(-1,1)*limits_ind[ind == "CMATT60"]$dif_rel_tc,
+                       limits = c(-0.4, 0.4),
                        breaks = c(-0.4, -0.2, 0, 0.2, 0.4),
-                       labels = label_percent()
+                       labels = c("<-40%", "-20%", 0, "20%", "40%>")
   ) +
   labs(
     fill = ""
@@ -266,10 +268,15 @@ acess_jobs2a <- ggplot(acess %>% filter(city %in% c("forcorrigidocm")) %>% st_tr
   # facet_wrap(~city)+
   theme_mapa()
 
-acess_jobs2b <- ggplot(acess %>% filter(city %in% c("forcorrigidoce")))+
+acess_jobs2b <- ggplot(acess %>% filter(city %in% c("forcorrigidoce")) %>% st_transform(3857))+
+  geom_raster(data = maptile, aes(x, y, fill = hex), alpha = 1) +
+  coord_equal() +
+  scale_fill_identity()+
+  # nova escala
+  new_scale_fill() +
   geom_sf(aes(fill = CMATT60), color = NA)+
-  geom_sf(data = limits, fill = NA)+
-  geom_sf(data = linhas_hm, size = 0.2)+
+  geom_sf(data = st_transform(limits, 3857), fill = NA)+
+  geom_sf(data = st_transform(linhas_hm, 3857), size = 0.2)+
   scale_fill_viridis_c(option = "inferno",
                        label = ks,
                        limits = c(0, max_plot2)
@@ -283,36 +290,27 @@ acess_jobs2b <- ggplot(acess %>% filter(city %in% c("forcorrigidoce")))+
 
 
 
-map_acess_dif_jobs_c2 <- acess_wide %>%
+map_acess_dif_jobs_c2 <- acess_wide %>% st_transform(3857) %>%
   filter(ind == "CMATT60") %>%
   ggplot()+
+  geom_raster(data = maptile, aes(x, y, fill = hex), alpha = 1) +
+  coord_equal() +
+  scale_fill_identity()+
+  # nova escala
+  new_scale_fill() +
   geom_sf(aes(fill = dif_rel_tc), color = NA)+
-  geom_sf(data = limits, fill = NA)+
-  geom_sf(data = linhas_hm, size = 0.2)+
+  geom_sf(data = st_transform(limits, 3857), fill = NA)+
+  geom_sf(data = st_transform(linhas_hm, 3857), size = 0.2)+
   scale_fill_distiller(palette = "RdBu", direction = 1,
-                       limits = c(-1,1)*limits_ind[ind == "CMATT60"]$dif_rel_tc,
+                       limits = c(-0.6, 0.6),
                        breaks = c(-0.6, -0.3, 0, 0.3, 0.6),
-                       labels = label_percent()
+                       labels = c("<-60%", "-30%", 0, "30%", "60%>")
   ) +
   labs(
     fill = ""
     # title = var
   )+
   theme_mapa()
-
-# boxplot_acess_dif_jobs_c1 <- acess_wide %>%
-#   filter(ind == "CMATT60") %>%
-#   ggplot()+
-#   geom_boxplot(aes(x = "", y = dif_log))+
-#   geom_hline(yintercept = 0)+
-#   scale_y_continuous(labels = label_percent())+
-#   labs(
-#     x = ""
-#     # title = var
-#   )+
-#   theme_ipsum_es(grid = "X")+
-#   theme(axis.text.y = element_blank())+
-#   coord_flip(ylim = c(-0.4, 0.4))
 
 
 map_acess_dif_c2 <- 
