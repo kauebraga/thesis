@@ -30,6 +30,12 @@ acess <- rbind(
 # abrir limits
 limits <- geobr::read_municipality(2304400)
 
+
+# open regions
+regions <- st_read("../../data/thesis/macrozonas/AREA Macrozonas Fortaleza (2017) (Lara)/Macrozonas.shp")
+regions <- st_read("../../data/thesis/macrozonas/AREA Regiões de Fortaleza (2017) (Lara)/Regiões de Fortaleza.shp")
+mapview(regions)
+
 # abrir maptles
 maptile <- read_rds("../../data/thesis/maptile_crop_mapbox_for_2017.rds")
 
@@ -55,6 +61,7 @@ theme_mapa <- function(base_size) {
 
 # linhas HM
 gtfs <- gtfstools::read_gtfs("../../otp/thesis/graphs/forpadrao/gtfs_for_metrofor_2021-01.zip")
+gtfs$stop_times <- gtfs$stop_times %>% arrange(trip_id, arrival_time)
 linhas_hm <- gtfs %>%
   gtfstools::get_trip_geometry(file = "stop_times") %>%
   left_join(gtfs$trips %>% select(trip_id, route_id), by = "trip_id") %>%
@@ -65,6 +72,30 @@ linhas_hm <- gtfs %>%
 
 acess <- acess %>%
   mutate(city = factor(city, levels = c("forpadrao", "forcorrigidocm", "forcorrigidoce")))
+
+
+# map with the regions ------------------------------------------------------------------------
+map_regions <- ggplot() +
+  geom_raster(data = maptile, aes(x, y, fill = hex), alpha = 1) +
+  coord_equal() +
+  scale_fill_identity()+
+  # nova escala
+  new_scale_fill() +
+  geom_sf(data = st_transform(regions, 3857), aes(fill = REGION), lwd = 0.5, color = "black", alpha = 0.6)+
+  geom_sf_text(data = st_transform(regions, 3857), aes(label = REGION))+
+  labs(
+    fill = ""
+    # title = var
+  )+
+  # facet_wrap(~city)+
+  theme_mapa()+
+  guides(fill = "none")
+
+
+ggsave(filename = "A1/figures/regions.png",
+       plot = map_regions,
+       width = 16, height = 16,
+       units = "cm")
 
 
 # acesso diff - figura 1  -------------------------------------------------------------------
@@ -104,7 +135,7 @@ limits_ind <- acess_wide %>%
   summarise(dif_abs = max(abs(dif_abs), na.rm = TRUE),
             dif_log_tc = max(abs(dif_log_tc), na.rm = TRUE),
             dif_rel_tc = max(abs(dif_rel_tc), na.rm = TRUE)
-            ) %>% setDT()
+  ) %>% setDT()
 
 
 
@@ -118,7 +149,8 @@ acess_jobs1a <- ggplot(acess %>% filter(city %in% c("forpadrao")) %>% st_transfo
   new_scale_fill() +
   geom_sf(aes(fill = CMATT60), color = NA)+
   geom_sf(data = st_transform(limits, 3857), fill = NA)+
-  # geom_sf(data = st_transform(linhas_hm, 3857), size = 0.2)+
+  geom_sf(data = st_transform(linhas_hm, 3857), linewidth = 0.3, linetype=3)+
+  # geom_sf(data = st_transform(regions, 3857), lwd = 0.5, fill = NA, color = "red")+
   scale_fill_viridis_c(option = "inferno",
                        label = ks,
                        limits = c(0, max_plot1)
@@ -138,7 +170,8 @@ acess_jobs1b <- ggplot(acess %>% filter(city %in% c("forcorrigidocm")) %>% st_tr
   new_scale_fill() +
   geom_sf(aes(fill = CMATT60), color = NA)+
   geom_sf(data = st_transform(limits, 3857), fill = NA)+
-  # geom_sf(data = st_transform(linhas_hm, 3857), size = 0.2)+
+  geom_sf(data = st_transform(linhas_hm, 3857), linewidth = 0.3, linetype=3)+
+  # geom_sf(data = st_transform(regions, 3857), lwd = 0.5, fill = NA, color = "red")+
   scale_fill_viridis_c(option = "inferno",
                        label = ks,
                        limits = c(0, max_plot1)
@@ -162,17 +195,26 @@ map_acess_dif_jobs_c1 <- acess_wide %>% st_transform(3857) %>%
   new_scale_fill() +
   geom_sf(aes(fill = dif_rel_tc), color = NA)+
   geom_sf(data = st_transform(limits, 3857), fill = NA)+
-  # geom_sf(data = st_transform(linhas_hm, 3857), size = 0.2)+
+  geom_sf(data = st_transform(linhas_hm, 3857), aes(linetype = ""), linewidth = 0.35)+
+  geom_sf(data = st_transform(regions, 3857), aes(color = ""), lwd = 0.07, fill = NA)+
+  scale_linetype_manual(values = c(4, 4, 4)) +
+  scale_color_manual(values = c("red")) +
   scale_fill_distiller(palette = "RdBu", direction = 1,
-                       limits = c(-1,1)*limits_ind[ind == "CMATT60"]$dif_rel_tc,
+                       limits = c(-0.4, 0.4),
                        breaks = c(-0.4, -0.2, 0, 0.2, 0.4),
-                       labels = label_percent()
+                       labels = c("<-40%", "-20%", 0, "20%", "40%>")
   ) +
   labs(
-    fill = ""
+    fill = "",
+    color = "Regions",
+    linetype = "High capacity lines"
     # title = var
   )+
-  theme_mapa()
+  theme_mapa()+
+  guides(
+    color = "none",
+    linetype = "none"
+  )
 
 # boxplot_acess_dif_jobs_c1 <- acess_wide %>%
 #   filter(ind == "CMATT60") %>%
@@ -192,14 +234,14 @@ map_acess_dif_jobs_c1 <- acess_wide %>% st_transform(3857) %>%
 map_acess_dif_c1 <- 
   (acess_jobs1a + acess_jobs1b)  /map_acess_dif_jobs_c1+
   plot_layout(heights = c(1, 2), widths = c(2, 1))
-  
+
 
 map_acess_dif_c1[[1]] <- map_acess_dif_c1[[1]] + 
   plot_layout(tag_level = 'new', guides = 'collect')
 map_acess_dif_c1 <- map_acess_dif_c1 + plot_annotation(tag_levels = c('A', '1')) &
   theme(legend.position = "bottom",
         legend.key.width= unit(1, 'cm'))
-  
+
 
 ggsave(filename = "A1/figures/2-map_acess_c1.png",
        plot = map_acess_dif_c1,
@@ -254,7 +296,7 @@ acess_jobs2a <- ggplot(acess %>% filter(city %in% c("forcorrigidocm")) %>% st_tr
   new_scale_fill() +
   geom_sf(aes(fill = CMATT60), color = NA)+
   geom_sf(data = st_transform(limits, 3857), fill = NA)+
-  geom_sf(data = st_transform(linhas_hm, 3857), size = 0.2)+
+  geom_sf(data = st_transform(linhas_hm, 3857), linewidth = 0.3, linetype=3)+
   scale_fill_viridis_c(option = "inferno",
                        label = ks,
                        limits = c(0, max_plot2)
@@ -266,10 +308,15 @@ acess_jobs2a <- ggplot(acess %>% filter(city %in% c("forcorrigidocm")) %>% st_tr
   # facet_wrap(~city)+
   theme_mapa()
 
-acess_jobs2b <- ggplot(acess %>% filter(city %in% c("forcorrigidoce")))+
+acess_jobs2b <- ggplot(acess %>% filter(city %in% c("forcorrigidoce")) %>% st_transform(3857))+
+  geom_raster(data = maptile, aes(x, y, fill = hex), alpha = 1) +
+  coord_equal() +
+  scale_fill_identity()+
+  # nova escala
+  new_scale_fill() +
   geom_sf(aes(fill = CMATT60), color = NA)+
   geom_sf(data = limits, fill = NA)+
-  geom_sf(data = linhas_hm, size = 0.2)+
+  geom_sf(data = st_transform(linhas_hm, 3857), linewidth = 0.3, linetype=3)+
   scale_fill_viridis_c(option = "inferno",
                        label = ks,
                        limits = c(0, max_plot2)
@@ -283,22 +330,34 @@ acess_jobs2b <- ggplot(acess %>% filter(city %in% c("forcorrigidoce")))+
 
 
 
-map_acess_dif_jobs_c2 <- acess_wide %>%
+map_acess_dif_jobs_c2 <- acess_wide %>% st_transform(3857) %>%
   filter(ind == "CMATT60") %>%
   ggplot()+
+  geom_raster(data = maptile, aes(x, y, fill = hex), alpha = 1) +
+  coord_equal() +
+  scale_fill_identity()+
+  # nova escala
+  new_scale_fill() +
   geom_sf(aes(fill = dif_rel_tc), color = NA)+
   geom_sf(data = limits, fill = NA)+
-  geom_sf(data = linhas_hm, size = 0.2)+
+  geom_sf(data = st_transform(linhas_hm, 3857), aes(linetype = ""), linewidth = 0.35)+
+  geom_sf(data = st_transform(regions, 3857), aes(color = ""), lwd = 0.07, fill = NA)+
+  scale_linetype_manual(values = c(4, 4, 4)) +
+  scale_color_manual(values = c("grey15")) +
   scale_fill_distiller(palette = "RdBu", direction = 1,
-                       limits = c(-1,1)*limits_ind[ind == "CMATT60"]$dif_rel_tc,
+                       limits = c(-0.6, 0.6),
                        breaks = c(-0.6, -0.3, 0, 0.3, 0.6),
-                       labels = label_percent()
+                       labels = c("<-60%", "-30%", 0, "30%", "60%>")
   ) +
   labs(
     fill = ""
     # title = var
   )+
-  theme_mapa()
+  theme_mapa() +
+  guides(
+    color = "none",
+    linetype = "none"
+  )
 
 # boxplot_acess_dif_jobs_c1 <- acess_wide %>%
 #   filter(ind == "CMATT60") %>%
