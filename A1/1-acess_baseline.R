@@ -51,6 +51,8 @@ theme_mapa <- function(base_size) {
 
 # linhas HM
 gtfs <- gtfstools::read_gtfs("../../otp/thesis/graphs/forpadrao/gtfs_for_metrofor_2021-01.zip")
+# gtfs stop times needs ordering
+gtfs$stop_times <- setorder(gtfs$stop_times, trip_id, stop_sequence)
 linhas_hm <- gtfs %>%
   gtfstools::get_trip_geometry(file = "stop_times") %>%
   left_join(gtfs$trips %>% select(trip_id, route_id), by = "trip_id") %>%
