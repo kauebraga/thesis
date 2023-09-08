@@ -23,9 +23,9 @@ ks <- function (x) { scales::label_number(accuracy = 1,
 
 # atencai aqyu
 acess <- rbind(
-  read_rds("../../data/thesis/output_access/acess_forpadrao.rds"),
-  read_rds("../../data/thesis/output_access/acess_forcorrigidocm.rds"),
-  read_rds("../../data/thesis/output_access/acess_forcorrigidoce.rds")
+  # read_rds("../../data/thesis/output_access/acess_forpadrao.rds"),
+  read_rds("data/A2/output_access/acess_forcorrigidocm.rds"),
+  read_rds("data/A2/output_access/acess_forcorrigidoce.rds")
 )
 
 # abrir limits
@@ -33,7 +33,7 @@ limits <- geobr::read_municipality(2304400)
 
 theme_mapa <- function(base_size) {
   
-  theme_void(base_family="Roboto Condensed") %+replace%
+  theme_void(base_family="Helvetica") %+replace%
     
     theme(
       legend.position = "bottom",
@@ -64,9 +64,10 @@ linhas_hm <- gtfs %>%
 
 acess_wide <- acess %>%
   filter(city %in% c("forcorrigidocm", "forcorrigidoce")) %>%
-  gather("ind", "valor", CMATT60) %>%
-  spread(city, valor) %>%
-  st_sf(crs = 4326)
+  pivot_longer(
+    cols = starts_with("access"),
+    names_to = "ind", 
+    values_to = "valor")
 
 # var <- "FCATT90";tipo <- "forcorrigidocm"
 
@@ -112,104 +113,11 @@ ggsave(filename = "figures/anpet_2021/map_geral.png",
        height = 6)
 
 
-# comparacao PR x P50 -------------------------------------------------------------------------
-
-
-
-acess_dif_wide <- acess %>%
-  filter(city %in% c("forpadrao", "forcorrigidocm")) %>%
-  select(origin, city, CMATT60) %>%
-  gather("ind", "valor", CMATT60) %>%
-  spread(city, valor) %>%
-  # calculate abs diffs
-  mutate(dif_abs = forcorrigidocm - forpadrao,
-         dif_log = log(forcorrigidocm/forpadrao)) %>%
-  mutate(dif_log_tc = ifelse(dif_log > 0.4, 0.4,
-                             ifelse(dif_log < -0.4, -0.4, dif_log))) %>%
-  st_sf(crs = 4326) %>%
-  filter(!is.na(dif_abs))
-
-
-
-# library(mapview)
-# mapview(acess_dif_wide, zcol = "dif_log_tc", col.regions = RColorBrewer::brewer.pal(10, "RdBu"), col = NULL)
-
-# limits for each indicator
-limits_ind <- acess_dif_wide %>%
-  st_set_geometry(NULL) %>%
-  group_by(ind) %>%
-  summarise(dif_abs = max(abs(dif_abs), na.rm = TRUE),
-            dif_log_tc = max(abs(dif_log_tc), na.rm = TRUE)) %>% setDT()
-
-
-# var <- "CMATT60"; tipo <- "dif_abs
-
-# function to maps
-fazer_mapa <- function(var, tipo) {
-  
-  # get limits
-  limits_scale <- limits_ind[ind == var] %>% pull(!!rlang::sym(tipo))
-  # print(limits_scale)
-  # limits_ind[ind == var] %>% pull{tipo)
-  
-  labelss <- if (grepl("CMA", var) & tipo == "dif_abs") ks else if (tipo == "dif_log_tc") label_percent() else label_number(accuracy = 0.01)
-  
-  
-  acess_dif_wide %>%
-    # filter(stringr::str_detect(ind, "TT")) %>%
-    filter(stringr::str_detect(ind, var)) %>%
-    ggplot()+
-    geom_sf(aes(fill = !!rlang::sym(tipo)), color = NA)+
-    geom_sf(data = limits, fill = NA)+
-    geom_sf(data = linhas_hm, size = 0.2)+
-    scale_fill_distiller(palette = "RdBu", direction = 1,
-                         limits = c(-1,1)*limits_scale,
-                         # breaks = c(-0.5, 0, 0.5),
-                         labels = labelss
-    ) +
-    labs(
-      fill = ""
-      # title = var
-    )+
-    theme_mapa()
-}
-
-# apply function
-a <- lapply(c(
-  "CMATT60"),
-  # "CMATT45", "FCATT45",
-  # "CMATT60", "FCATT60",
-  # "CMATT90", "FCATT90"),
-  fazer_mapa, tipo = "dif_log_tc")
-
-# maps_abs <- purrr::reduce(a, `+`) + plot_layout(ncol = 2)
-map_abs <- a
-
-ggsave(filename = "figures/anpet_2021/map_comp_abs_PRP50.png",
-       plot = maps_abs,
-       units = "cm",
-       width = 16,
-       height = 14)
-
-b <- lapply(c(
-  # "CMATT45", "FCATT45",
-  "CMATT60", "FCATT60",
-  "CMATT90", "FCATT90"),
-  fazer_mapa, tipo = "dif_log_tc")
-
-maps_log <- purrr::reduce(b, `+`) + plot_layout(ncol = 2, guides = "collect") & 
-  theme(legend.position = "bottom")
-
-ggsave(filename = "figures/anpet_2021/map_comp_log_PRP50.png",
-       plot = maps_log,
-       units = "cm",
-       width = 16,
-       height = 14)
-
 
 # mapview breaks
 # https://stackoverflow.com/questions/55485100/mapview-legend-scaling
 # mapview(acess_dif_wide, zcol = "dif_abs", col.regions = RColorBrewer::brewer.pal(10, "RdBu"), col = NULL)
+
 
 
 
@@ -223,7 +131,10 @@ ggsave(filename = "figures/anpet_2021/map_comp_log_PRP50.png",
 
 acess_dif_wide <- acess %>%
   filter(city %in% c("forcorrigidocm", "forcorrigidoce")) %>%
-  gather("ind", "valor", CMATT45:FCATT90) %>%
+  pivot_longer(
+    cols = starts_with("access"),
+    names_to = "ind", 
+    values_to = "valor") %>%
   spread(city, valor) %>%
   # calculate abs diffs
   mutate(dif_abs = forcorrigidoce - forcorrigidocm,
@@ -231,11 +142,9 @@ acess_dif_wide <- acess %>%
   filter(!is.na(dif_abs)) %>%
   filter(!is.infinite(dif_log)) %>%
   filter(!is.na(dif_log)) %>%
-  mutate(dif_log_tc = ifelse(dif_log > 0.8, 0.8,
-                             ifelse(dif_log < -0.8, -0.8, dif_log))) %>%
+  mutate(dif_log_tc = ifelse(dif_log > 0.6, 0.6,
+                             ifelse(dif_log < -0.6, -0.6, dif_log))) %>%
   st_sf(crs = 4326)
-
-
 
 # acess_dif_wide %>% filter(ind == "FCATT45") %>% filter(dif_abs > 0.126)
 
@@ -247,18 +156,18 @@ mapview(a, zcol = "dif_log_tc", col.regions = RColorBrewer::brewer.pal(10, "RdBu
 # limits for each indicator
 limits_ind <- acess_dif_wide %>%
   st_set_geometry(NULL) %>%
-  group_by(ind) %>%
+  group_by(ind, travel_time) %>%
   summarise(dif_abs = max(abs(dif_abs), na.rm = TRUE),
             dif_log_tc = max(abs(dif_log_tc), na.rm = TRUE)) %>% setDT()
 
 
-# var <- "CMATT60"; tipo <- "dif_abs
+# var <- "access_cum"; tipo <- "dif_abs"
 
 # function to maps
 fazer_mapa <- function(var, tipo) {
   
   # get limits
-  limits_scale <- limits_ind[ind == var] %>% pull(!!rlang::sym(tipo))
+  limits_scale <- limits_ind[ind == var & travel_time == 60] %>% pull(!!rlang::sym(tipo))
   # print(limits_scale)
   # limits_ind[ind == var] %>% pull{tipo)
   
@@ -268,10 +177,11 @@ fazer_mapa <- function(var, tipo) {
   acess_dif_wide %>%
     # filter(stringr::str_detect(ind, "TT")) %>%
     filter(stringr::str_detect(ind, var)) %>%
+    filter(travel_time == 60) %>%
     ggplot()+
     geom_sf(aes(fill = !!rlang::sym(tipo)), color = NA)+
     geom_sf(data = limits, fill = NA)+
-    geom_sf(data = linhas_hm, size = 0.2)+
+    # geom_sf(data = linhas_hm, size = 0.2)+
     scale_fill_distiller(palette = "RdBu", direction = 1,
                          limits = c(-1,1)*limits_scale,
                          # breaks = c(-0.5, 0, 0.5),
@@ -287,13 +197,13 @@ fazer_mapa <- function(var, tipo) {
 # apply function
 a <- lapply(c(
   # "CMATT45", "FCATT45",
-  "CMATT60", "FCATT60",
-  "CMATT90", "FCATT90"),
+  "access_cum", "access_2sfca_cma",
+  "access_2sfca_cma", "access_2sfca_grav"),
   fazer_mapa, tipo = "dif_abs")
 
 maps_abs <- purrr::reduce(a, `+`) + plot_layout(ncol = 2)
 
-ggsave(filename = "figures/anpet_2021/map_comp_abs_P50P85.png",
+ggsave(filename = "A2/figures/map_comp_abs_P50P85.png",
        plot = maps_abs,
        units = "cm",
        width = 16,
@@ -301,15 +211,16 @@ ggsave(filename = "figures/anpet_2021/map_comp_abs_P50P85.png",
 
 b <- lapply(c(
   # "CMATT45", "FCATT45",
-  "CMATT60", "FCATT60",
-  "CMATT90", "FCATT90"),
+  "access_cum", "access_2sfca_cma",
+  "access_2sfca_cma", "access_2sfca_grav"),
   fazer_mapa, tipo = "dif_log_tc")
 
 
-maps_log <- purrr::reduce(b, `+`) + plot_layout(ncol = 2, guides = "collect") & 
+maps_log <- purrr::reduce(b, `+`) + plot_layout(ncol = 2) & 
+  # plot_layout(ncol = 2, guides = "collect") & 
   theme(legend.position = "bottom")
 
-ggsave(filename = "figures/anpet_2021/map_comp_log_P50P85.png",
+ggsave(filename = "A2/figures/map_comp_log_P50P85.png",
        plot = maps_log,
        units = "cm",
        width = 16,

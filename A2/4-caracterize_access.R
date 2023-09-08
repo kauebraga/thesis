@@ -22,9 +22,9 @@ ks <- function (x) { scales::label_number(accuracy = 1,
 
 # atencai aqyu
 acess <- rbind(
-  read_rds("../../data/thesis/output_access/acess_forpadrao.rds"),
-  read_rds("../../data/thesis/output_access/acess_forcorrigidocm.rds"),
-  read_rds("../../data/thesis/output_access/acess_forcorrigidoce.rds")
+  # read_rds("../../data/thesis/output_access/acess_forpadrao.rds"),
+  read_rds("data/A2/output_access/acess_forcorrigidocm.rds"),
+  read_rds("data/A2/output_access/acess_forcorrigidoce.rds")
 )
 
 # scenario <- "C1"
@@ -37,9 +37,11 @@ caracterize_scenario <- function(scenario) {
   
   acess_wide <- acess %>%
     st_set_geometry(NULL) %>%
-    filter(city %in% scenario1) %>%
-    select(origin, city, CMATT60, CMAET60) %>%
-    gather("ind", "valor", CMATT60:CMAET60) %>%
+    filter(city %in% c("forcorrigidocm", "forcorrigidoce")) %>%
+    pivot_longer(
+      cols = starts_with("access"),
+      names_to = "ind", 
+      values_to = "valor") %>%
     spread(city, valor) %>%
     # calculate abs diffs
     mutate(dif_abs = !! sym(scenario1[2]) - !! sym(scenario1[1]),
@@ -58,11 +60,12 @@ caracterize_scenario <- function(scenario) {
   
   # bring vars to access
   acess_wide <- acess_wide %>%
-    left_join(hexagonos_sf, by = c("origin" = "id_hex"))
+    left_join(hexagonos_sf, by = c("id" = "id_hex"))
   
   # select indc
   acess_wide_ind <- acess_wide %>%
-    filter(grepl(pattern = "CMA(ET|TT)60", x = ind)) %>%
+    filter(travel_time == 60) %>%
+    # filter(grepl(pattern = "CMA(ET|TT)60", x = ind)) %>%
     mutate(R003 = as.factor(R003)) %>%
     mutate(P001 = ifelse(is.na(P001), 0, P001)) %>%
     filter(!is.na(R003))
@@ -79,23 +82,21 @@ caracterize_scenario <- function(scenario) {
     pivot_wider(names_from = "classe", values_from = c(value)) %>%
     mutate(palma = rico/pobre)
   
-  # table(acess_wide_ind$ind)
-  # table(acess_wide_ind$R003)
-
-  # acess_wide_ind %>% group_by(ind, R003) %>% summarise(mean = mean(dif_log, na.rm = TRUE))
   
-  acess_wide_ind <- acess_wide_ind %>%
-    mutate(ind = factor(ind, levels = c("CMATT60", "CMAET60")))
-  
-  facet_labels <- c(
-    'CMATT60'="Jobs",
-    'CMAET60'="School enrollments"
-  )
+  # acess_wide_ind <- acess_wide_ind %>%
+  #   mutate(ind = factor(ind, levels = c("CMATT60", "CMAET60")))
+  # 
+  # facet_labels <- c(
+  #   'CMATT60'="Jobs",
+  #   'CMAET60'="School enrollments"
+  # )
 
   boxplot_income <- ggplot()+
     geom_boxplot(data = acess_wide_ind, aes(x = R003, y = dif_log_tc, weight = P001, color = R003), outlier.size = 0.5, lwd = 0.3)+
     geom_hline(yintercept = 0)+
-    facet_wrap( ~ ind, ncol  = 1, labeller = as_labeller(facet_labels))+
+    facet_wrap( ~ ind, ncol  = 1
+                # , labeller = as_labeller(facet_labels)
+                )+
     scale_colour_brewer(palette = "RdBu", labels=c('D1 \nPoorest', paste0('D', c(2:9)), 'D10 \nRichest'), name='Income\n decile')+
     hrbrthemes::theme_ipsum()+
     theme(panel.spacing = unit(0.1, "lines"),
